@@ -1,0 +1,28 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments & tooling
+.venv/
+venv/
+env/
+.env/
+.uv/
+.pytest_cache/
+.mypy_cache/
+
+# IDE & OS junk
+.DS_Store
+.idea/
+.vscode/
+
+# Project-specific
+anthropic-skills/
+skills_mcp.log
+skills_mcp_cache/
