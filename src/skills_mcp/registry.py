@@ -16,51 +16,83 @@ class SkillRegistry:
 
     def refresh(self):
         """Rebuild the cache from disk."""
-        self._cache = {}
+        active_ids = set()
         for registry in self.registries:
-            skills = self._scan_registry(registry)
-            self._cache[registry["id"]] = skills
+            registry_id = registry["id"]
+            active_ids.add(registry_id)
+            refreshed = self._refresh_registry(registry)
+            self._cache[registry_id] = refreshed
+
+        # Drop registries that are no longer configured.
+        for cached_id in list(self._cache.keys()):
+            if cached_id not in active_ids:
+                del self._cache[cached_id]
+
         return self._cache
 
-    def _scan_registry(self, registry):
-        """Scan a registry path for SKILL.md entries."""
+    def _refresh_registry(self, registry):
+        """Refresh cache entries for a single registry."""
+        registry_id = registry["id"]
         path = Path(registry["path"])
-        if not path.exists():
-            return []
+        previous = self._cache.get(registry_id, {})
+        cached_skills = previous.get("skills", {})
+        updated_skills = {}
 
-        skills = []
-        for entry in sorted(path.iterdir()):
-            if not entry.is_dir():
-                continue
+        if path.exists():
+            for entry in sorted(path.iterdir()):
+                if not entry.is_dir():
+                    continue
 
-            metadata = parse_skill_dir(entry)
-            if not metadata:
-                continue
+                skill_file = entry / "SKILL.md"
+                if not skill_file.exists():
+                    continue
 
-            skill_path = entry / "SKILL.md"
-            mtime = datetime.fromtimestamp(
-                skill_path.stat().st_mtime, tz=timezone.utc
-            )
+                slug = entry.name
+                stat_info = skill_file.stat()
+                cached_record = cached_skills.get(slug)
+                cached_mtime = cached_record["_mtime"] if cached_record else None
 
-            record = {
-                "registry_id": registry["id"],
-                "slug": entry.name,
-                "metadata": metadata,
-                "path": skill_path,
-                "writable": registry.get("writable", False),
-                "last_modified": mtime.isoformat(),
-                "tags": registry.get("tags", []),
-            }
-            skills.append(record)
-        return skills
+                if cached_record and cached_mtime == stat_info.st_mtime:
+                    record = cached_record
+                else:
+                    metadata = parse_skill_dir(entry)
+                    if not metadata:
+                        continue
+                    record = self._build_record(
+                        registry,
+                        slug,
+                        skill_file,
+                        metadata,
+                        stat_info.st_mtime,
+                    )
+                updated_skills[slug] = record
+
+        return {
+            "skills": updated_skills,
+            "refreshed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _build_record(self, registry, slug, skill_file, metadata, mtime):
+        """Construct the cache record for a parsed skill."""
+        return {
+            "registry_id": registry["id"],
+            "slug": slug,
+            "metadata": metadata,
+            "path": skill_file,
+            "writable": registry.get("writable", False),
+            "last_modified": datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat(),
+            "tags": registry.get("tags", []),
+            "_mtime": mtime,
+            "_sha256": metadata.get("sha256"),
+        }
 
     def list_skills(self):
         """Return cached skills across registries."""
         if not self._cache:
             self.refresh()
         skills = []
-        for items in self._cache.values():
-            skills.extend(items)
+        for registry_cache in self._cache.values():
+            skills.extend(registry_cache["skills"].values())
         return skills
 
     def summary(self):
@@ -71,7 +103,7 @@ class SkillRegistry:
         summary_rows = []
         for registry in self.registries:
             registry_id = registry["id"]
-            skills = self._cache.get(registry_id, [])
+            skills = self._cache.get(registry_id, {}).get("skills", {})
             summary_rows.append(
                 {
                     "id": registry_id,
@@ -87,7 +119,28 @@ class SkillRegistry:
         if not self._cache:
             self.refresh()
 
-        for record in self._cache.get(registry_id, []):
-            if record["slug"] == slug:
-                return record
+        registry_cache = self._cache.get(registry_id, {})
+        record = registry_cache.get("skills", {}).get(slug)
+        if record:
+            return record
         return None
+
+    def warning_report(self):
+        """Return a list of skills that produced warnings while parsing."""
+        if not self._cache:
+            self.refresh()
+
+        reports = []
+        for registry_cache in self._cache.values():
+            for record in registry_cache.get("skills", {}).values():
+                warnings = record["metadata"].get("warnings", [])
+                if warnings:
+                    reports.append(
+                        {
+                            "registry_id": record["registry_id"],
+                            "slug": record["slug"],
+                            "path": str(record["path"]),
+                            "warnings": warnings,
+                        }
+                    )
+        return reports

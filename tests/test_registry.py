@@ -1,5 +1,6 @@
 """Tests for skills_mcp.registry."""
 
+import os
 import textwrap
 
 from skills_mcp.registry import SkillRegistry
@@ -140,3 +141,157 @@ def test_registry_skips_directories_without_skill_file(tmp_path):
     ]
     assert registry.list_skills() == []
     assert registry.find_skill("empty", "missing") is None
+
+
+def test_refresh_reuses_cached_records_when_unmodified(tmp_path):
+    registry_path = create_registry(
+        tmp_path,
+        "catalog",
+        [
+            (
+                "epsilon",
+                """\
+                ---
+                name: Epsilon Skill
+                description: Cached skill.
+                ---
+                Body.
+                """,
+            ),
+        ],
+    )
+
+    registry = SkillRegistry(
+        [{"id": "catalog", "path": registry_path, "writable": False, "tags": []}]
+    )
+
+    initial = registry.find_skill("catalog", "epsilon")
+    registry.refresh()
+    cached = registry.find_skill("catalog", "epsilon")
+
+    assert cached is initial
+
+
+def test_refresh_detects_modified_skill(tmp_path):
+    registry_path = create_registry(
+        tmp_path,
+        "catalog",
+        [
+            (
+                "zeta",
+                """\
+                ---
+                name: Zeta Skill
+                description: Original description.
+                ---
+                Body v1.
+                """,
+            ),
+        ],
+    )
+
+    registry = SkillRegistry(
+        [{"id": "catalog", "path": registry_path, "writable": False, "tags": []}]
+    )
+
+    original = registry.find_skill("catalog", "zeta")
+    skill_file = registry_path / "zeta" / "SKILL.md"
+    skill_file.write_text(
+        textwrap.dedent(
+            """\
+            ---
+            name: Zeta Skill
+            description: Updated description.
+            ---
+            Body v2.
+            """
+        ),
+        encoding="utf-8",
+    )
+    current_mtime = skill_file.stat().st_mtime
+    os.utime(skill_file, (current_mtime + 5, current_mtime + 5))
+
+    registry.refresh()
+    updated = registry.find_skill("catalog", "zeta")
+
+    assert updated is not original
+    assert (
+        updated["metadata"]["sha256"] != original["metadata"]["sha256"]
+    ), "Digest should change when file content changes."
+    assert updated["metadata"]["description"] == "Updated description."
+
+
+def test_refresh_removes_deleted_skill(tmp_path):
+    registry_path = create_registry(
+        tmp_path,
+        "catalog",
+        [
+            (
+                "theta",
+                """\
+                ---
+                name: Theta Skill
+                description: To be deleted.
+                ---
+                Body.
+                """,
+            ),
+        ],
+    )
+
+    registry = SkillRegistry(
+        [{"id": "catalog", "path": registry_path, "writable": False, "tags": []}]
+    )
+
+    assert registry.find_skill("catalog", "theta") is not None
+
+    for path in (registry_path / "theta").glob("**/*"):
+        if path.is_file():
+            path.unlink()
+    (registry_path / "theta").rmdir()
+
+    registry.refresh()
+    assert registry.find_skill("catalog", "theta") is None
+    assert registry.summary() == [
+        {"id": "catalog", "path": str(registry_path), "writable": False, "count": 0}
+    ]
+
+
+def test_warning_report_includes_skills_with_warnings(tmp_path):
+    registry_path = create_registry(
+        tmp_path,
+        "catalog",
+        [
+            (
+                "iota",
+                """\
+                ---
+                description: Missing name.
+                ---
+                Body.
+                """,
+            ),
+            (
+                "kappa",
+                """\
+                ---
+                name: Kappa Skill
+                description: Complete entry.
+                ---
+                Body.
+                """,
+            ),
+        ],
+    )
+
+    registry = SkillRegistry(
+        [{"id": "catalog", "path": registry_path, "writable": False, "tags": []}]
+    )
+
+    reports = registry.warning_report()
+
+    assert len(reports) == 1
+    report = reports[0]
+    assert report["slug"] == "iota"
+    assert report["registry_id"] == "catalog"
+    assert "Missing 'name' in frontmatter." in report["warnings"]
