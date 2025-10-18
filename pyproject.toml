@@ -1,0 +1,27 @@
+[project]
+name = "skills-mcp"
+version = "0.1.0"
+description = "MCP server exposing Claude Skills as a read-only registry for Codex."
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [
+    { name = "Codex Contributors" }
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+]
+
+[project.scripts]
+skills-cli = "skills_mcp.cli.main:main"
+skills-mcp-server = "skills_mcp.server:main"
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
