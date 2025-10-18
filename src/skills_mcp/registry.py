@@ -2,17 +2,21 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import time
 
+from .logging import get_logger
 from .parser import parse_skill_dir
 
 
 class SkillRegistry:
     """Manage discovery of Skills across multiple registries."""
 
-    def __init__(self, registries):
+    def __init__(self, registries, cache_ttl=None, logger=None):
         """Store the registry definitions."""
         self.registries = registries
         self._cache = {}
+        self.cache_ttl = cache_ttl
+        self.logger = logger or get_logger(__name__)
 
     def refresh(self):
         """Rebuild the cache from disk."""
@@ -28,6 +32,7 @@ class SkillRegistry:
             if cached_id not in active_ids:
                 del self._cache[cached_id]
 
+        self.logger.debug("Registry cache refreshed", extra={"registries": list(active_ids)})
         return self._cache
 
     def _refresh_registry(self, registry):
@@ -69,7 +74,7 @@ class SkillRegistry:
 
         return {
             "skills": updated_skills,
-            "refreshed_at": datetime.now(timezone.utc).isoformat(),
+            "refreshed_at": time.time(),
         }
 
     def _build_record(self, registry, slug, skill_file, metadata, mtime):
@@ -88,8 +93,7 @@ class SkillRegistry:
 
     def list_skills(self):
         """Return cached skills across registries."""
-        if not self._cache:
-            self.refresh()
+        self._ensure_cache()
         skills = []
         for registry_cache in self._cache.values():
             skills.extend(registry_cache["skills"].values())
@@ -97,8 +101,7 @@ class SkillRegistry:
 
     def summary(self):
         """Return a summary of registries and skill counts."""
-        if not self._cache:
-            self.refresh()
+        self._ensure_cache()
 
         summary_rows = []
         for registry in self.registries:
@@ -116,8 +119,7 @@ class SkillRegistry:
 
     def find_skill(self, registry_id, slug):
         """Locate a skill record by registry and slug."""
-        if not self._cache:
-            self.refresh()
+        self._ensure_cache()
 
         registry_cache = self._cache.get(registry_id, {})
         record = registry_cache.get("skills", {}).get(slug)
@@ -127,8 +129,7 @@ class SkillRegistry:
 
     def warning_report(self):
         """Return a list of skills that produced warnings while parsing."""
-        if not self._cache:
-            self.refresh()
+        self._ensure_cache()
 
         reports = []
         for registry_cache in self._cache.values():
@@ -144,3 +145,31 @@ class SkillRegistry:
                         }
                     )
         return reports
+
+    def _ensure_cache(self, force=False):
+        """Refresh cache when empty or TTL expired."""
+        now = time.time()
+        if force or not self._cache:
+            self.refresh()
+            return
+
+        if self.cache_ttl is None:
+            return
+
+        for registry in self.registries:
+            cached = self._cache.get(registry["id"])
+            if not cached:
+                self.refresh()
+                return
+            refreshed_at = cached.get("refreshed_at")
+            if refreshed_at is None or now - refreshed_at >= self.cache_ttl:
+                self.logger.debug(
+                    "Registry cache expired; forcing refresh",
+                    extra={
+                        "registry_id": registry["id"],
+                        "cache_ttl": self.cache_ttl,
+                        "age": now - (refreshed_at or 0),
+                    },
+                )
+                self.refresh()
+                return

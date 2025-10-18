@@ -1,5 +1,7 @@
 """Entry point for the skills MCP server."""
 
+import os
+
 from .config import get_registries
 from .registry import SkillRegistry
 from .resources import SkillResourceAdapter
@@ -9,7 +11,14 @@ from .tools import changes_since, get_skill_detail, registry_info, search_skills
 def initialize_components():
     """Return initialized registry and adapter instances."""
     registries = get_registries()
-    registry = SkillRegistry(registries)
+    ttl_value = os.environ.get("SKILLS_MCP_CACHE_TTL")
+    cache_ttl = None
+    if ttl_value:
+        try:
+            cache_ttl = float(ttl_value)
+        except ValueError:
+            cache_ttl = None
+    registry = SkillRegistry(registries, cache_ttl=cache_ttl)
     adapter = SkillResourceAdapter(registry)
     return registry, adapter
 

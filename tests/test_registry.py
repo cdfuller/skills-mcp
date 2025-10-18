@@ -295,3 +295,50 @@ def test_warning_report_includes_skills_with_warnings(tmp_path):
     assert report["slug"] == "iota"
     assert report["registry_id"] == "catalog"
     assert "Missing 'name' in frontmatter." in report["warnings"]
+
+
+def test_cache_ttl_forces_refresh(tmp_path):
+    registry_path = create_registry(
+        tmp_path,
+        "catalog",
+        [
+            (
+                "omega",
+                """\
+                ---
+                name: Omega Skill
+                description: Initial description.
+                ---
+                Body v1.
+                """,
+            ),
+        ],
+    )
+
+    registry = SkillRegistry(
+        [{"id": "catalog", "path": registry_path, "writable": False, "tags": []}],
+        cache_ttl=0,
+    )
+
+    first = registry.list_skills()[0]
+
+    skill_file = registry_path / "omega" / "SKILL.md"
+    skill_file.write_text(
+        textwrap.dedent(
+            """\
+            ---
+            name: Omega Skill
+            description: Updated description.
+            ---
+            Body v2.
+            """
+        ),
+        encoding="utf-8",
+    )
+    current = skill_file.stat().st_mtime
+    os.utime(skill_file, (current + 5, current + 5))
+
+    updated = registry.list_skills()[0]
+
+    assert updated is not first
+    assert updated["metadata"]["description"] == "Updated description."

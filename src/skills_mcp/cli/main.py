@@ -1,7 +1,5 @@
 """Command-line interface entry point."""
 
-from __future__ import annotations
-
 import argparse
 import sys
 from pathlib import Path
@@ -117,7 +115,7 @@ def build_parser():
     return parser
 
 
-def resolve_template_dir(name: str) -> Path:
+def resolve_template_dir(name):
     """Return the path to a template directory by name."""
     templates_root = Path(__file__).resolve().parent.parent / "templates"
     candidate = templates_root / f"{name}_skill"
@@ -126,7 +124,7 @@ def resolve_template_dir(name: str) -> Path:
     return candidate
 
 
-def main(argv: list[str] | None = None):
+def main(argv=None):
     """Parse arguments and trigger CLI actions."""
     parser = build_parser()
     args = parser.parse_args(argv)

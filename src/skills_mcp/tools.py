@@ -1,14 +1,9 @@
 """Read-only MCP tool implementations for Skills catalogs."""
 
-from __future__ import annotations
-
 from datetime import datetime
-from typing import Iterable, List, Optional
-
-from .resources import SkillResourceAdapter
 
 
-def _coerce_limit(limit: Optional[int], default: int = 20) -> int:
+def _coerce_limit(limit, default=20):
     """Normalize limit values."""
     if limit is None:
         return default
@@ -19,14 +14,14 @@ def _coerce_limit(limit: Optional[int], default: int = 20) -> int:
     return max(parsed, 1)
 
 
-def _normalize_query(text: Optional[str]) -> List[str]:
+def _normalize_query(text):
     """Break query text into comparable tokens."""
     if not text:
         return []
     return [part for part in text.lower().split() if part]
 
 
-def _parse_iso8601(timestamp: Optional[str]) -> Optional[datetime]:
+def _parse_iso8601(timestamp):
     """Parse a subset of ISO-8601 timestamps."""
     if not timestamp:
         return None
@@ -37,12 +32,12 @@ def _parse_iso8601(timestamp: Optional[str]) -> Optional[datetime]:
 
 
 def search_skills(
-    adapter: SkillResourceAdapter,
+    adapter,
     *,
-    query: Optional[str] = None,
-    registry_ids: Optional[Iterable[str]] = None,
-    tags: Optional[Iterable[str]] = None,
-    limit: Optional[int] = None,
+    query=None,
+    registry_ids=None,
+    tags=None,
+    limit=None,
 ):
     """Return skills matching query, registries, and tags."""
     tokens = _normalize_query(query)
@@ -56,7 +51,7 @@ def search_skills(
         if allowed_registries and record["registry_id"] not in allowed_registries:
             continue
 
-        resource = adapter._build_resource(record).to_dict()
+        resource = adapter._build_resource(record)
         resource_tags = {tag.lower() for tag in resource.get("tags", [])}
         if normalized_tags and not resource_tags.issuperset(normalized_tags):
             continue
@@ -85,7 +80,7 @@ def search_skills(
     return {"results": results, "exhausted": exhausted}
 
 
-def get_skill_detail(adapter: SkillResourceAdapter, registry_id: str, slug: str):
+def get_skill_detail(adapter, registry_id, slug):
     """Return full metadata and content for a skill."""
     resource_id = adapter.resource_id_for(registry_id, slug)
     data = adapter.get_resource(resource_id)
@@ -99,17 +94,17 @@ def get_skill_detail(adapter: SkillResourceAdapter, registry_id: str, slug: str)
     }
 
 
-def registry_info(adapter: SkillResourceAdapter):
+def registry_info(adapter):
     """Return registry status information."""
     return {"registries": adapter.registry.summary()}
 
 
 def changes_since(
-    adapter: SkillResourceAdapter,
+    adapter,
     *,
-    registry_id: Optional[str] = None,
-    since: Optional[str] = None,
-    hashes: Optional[Iterable[str]] = None,
+    registry_id=None,
+    since=None,
+    hashes=None,
 ):
     """Return skills updated since timestamp or matching hashes."""
     since_dt = _parse_iso8601(since)
@@ -130,11 +125,11 @@ def changes_since(
 
         if hash_set:
             if record_hash not in hash_set:
-                updated.append(adapter._build_resource(record).to_dict())
+                updated.append(adapter._build_resource(record))
             continue
 
         if since_dt and last_modified and last_modified > since_dt:
-            updated.append(adapter._build_resource(record).to_dict())
+            updated.append(adapter._build_resource(record))
 
     removed = []
     if hash_set:

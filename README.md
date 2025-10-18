@@ -61,6 +61,12 @@ Use the CLI to troubleshoot issues locally before publishing new skills.
 ## Change Detection & Caching
 `SkillRegistry` keeps an in-memory cache keyed by registry and directory slug. It refreshes entries only when the on-disk `SKILL.md` mtime changes, so `list`, `export`, and MCP tools respond quickly on subsequent calls. Editing or removing files triggers a new parse on the next `refresh()`; `scaffold` calls refresh automatically after creating a new skill.
 
+### Cache TTL
+- `SKILLS_MCP_CACHE_TTL=<seconds>` — optional environment variable that forces a refresh after the given number of seconds. Set to `0` to always rescan, or leave unset to reuse the cache indefinitely.
+
+## Logging
+- `SKILLS_MCP_LOG_LEVEL=DEBUG` (or INFO/WARNING/ERROR) controls package logging. The CLI and MCP server configure Python's logging once per run.
+
 ## Troubleshooting
 - **`uv` sandbox errors:** retry the failing command with elevated permissions when prompted; the CLI may need to read cached sdists under `~/.cache/uv/`.
 - **Missing registries:** set `SKILLS_MCP_HOME` or edit `~/.config/skills-mcp/skills_mcp.toml` to declare additional registry paths.
