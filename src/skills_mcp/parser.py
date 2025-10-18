@@ -70,6 +70,10 @@ def parse_skill_dir(path):
     raw_text = read_skill_file(skill_file)
     frontmatter, body, warnings = split_frontmatter(raw_text)
 
+    if not isinstance(frontmatter, dict):
+        warnings.append("Frontmatter must be a mapping.")
+        frontmatter = {}
+
     name = frontmatter.get("name", "")
     description = frontmatter.get("description", "")
     if not name:

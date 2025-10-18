@@ -26,3 +26,5 @@ env/
 anthropic-skills/
 skills_mcp.log
 skills_mcp_cache/
+skills_reference/
+
